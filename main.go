@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -284,12 +285,12 @@ func main() {
 		})
 	})
 
-	// go func() {
-	// 	for {
-	// 		NotifyJob()
-	// 		time.Sleep(5 * time.Second)
-	// 	}
-	// }()
+	go func() {
+		for {
+			NotifyJob()
+			time.Sleep(1 * time.Second)
+		}
+	}()
 
 	r.Run(":8080")
 }
