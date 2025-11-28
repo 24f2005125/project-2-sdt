@@ -292,5 +292,6 @@ func main() {
 		}
 	}()
 
-	r.Run(":8080")
+	log.Printf("Starting server on :%s", os.Getenv("PORT"))
+	r.Run(":" + os.Getenv("PORT"))
 }
