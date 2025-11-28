@@ -419,6 +419,9 @@ function prettyJSON(raw) {
       
       // Show quick answer form if there are active sessions with pending attempts
       const hasActiveSessions = quizSessions.some(s => {
+        // Skip expired or completed sessions
+        if (s.status === 'expired' || s.status === 'completed') return false;
+        
         const attempts = quizAttempts[s.id] || [];
         return attempts.some(a => {
           const isPending = !a.answer || a.answer === '';
@@ -427,6 +430,7 @@ function prettyJSON(raw) {
           return isPending && notExpired;
         });
       });
+      
       if (hasActiveSessions) {
         quickAnswerForm.classList.remove('hidden');
       } else {
@@ -442,6 +446,9 @@ function prettyJSON(raw) {
       sessionSelect.innerHTML = '<option value="">Select a session...</option>';
       
       quizSessions.forEach(session => {
+        // Skip expired or completed sessions
+        if (session.status === 'expired' || session.status === 'completed') return;
+        
         const attempts = quizAttempts[session.id] || [];
         const hasPendingAttempts = attempts.some(a => {
           const isPending = !a.answer || a.answer === '';
@@ -605,18 +612,20 @@ function prettyJSON(raw) {
         }
       });
       
-      // If no active timers, clear the interval and refresh data
+      // If no active timers, just stop the interval without reloading
       if (!hasActiveTimers && timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
-        if (activeTab === 'quiz') {
-          loadQuizSessions(true);
-        }
       }
     }
     
     function startTimers() {
       if (timerInterval) clearInterval(timerInterval);
+      
+      // Only start timer if there are actually timers to update
+      const hasTimers = document.querySelectorAll('.timer-countdown').length > 0;
+      if (!hasTimers) return;
+      
       updateTimers(); // Initial update
       timerInterval = setInterval(updateTimers, 1000);
     }
