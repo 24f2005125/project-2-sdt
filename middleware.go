@@ -19,7 +19,7 @@ func EnsureAuthenticated() gin.HandlerFunc {
 
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, APIResponse[any]{
+			c.AbortWithStatusJSON(http.StatusBadRequest, APIResponse[any]{
 				Status:  "error",
 				Message: "could_not_read_request_body",
 				Error:   err.Error(),
@@ -33,7 +33,7 @@ func EnsureAuthenticated() gin.HandlerFunc {
 		var req TaskRequest
 
 		if err := json.Unmarshal(bodyBytes, &req); err != nil {
-			c.JSON(http.StatusBadRequest, APIResponse[any]{
+			c.AbortWithStatusJSON(http.StatusBadRequest, APIResponse[any]{
 				Status:  "error",
 				Message: "invalid_request_body",
 				Error:   err.Error(),
@@ -43,7 +43,7 @@ func EnsureAuthenticated() gin.HandlerFunc {
 		}
 
 		if req.Secret != os.Getenv("SECRET") {
-			c.JSON(http.StatusForbidden, APIResponse[any]{
+			c.AbortWithStatusJSON(http.StatusForbidden, APIResponse[any]{
 				Status:  "error",
 				Message: "unauthorized",
 				Error:   "invalid_secret",
