@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const NOTIFICATION_TEXT = "We have an ingest task for project-2-sdt !"
+const NOTIFICATION_TEXT = "We have an ingest task for project-2-sdt, please intervene!"
 
 func NotifyJob() {
 	var ingests []Ingests
@@ -18,14 +18,13 @@ func NotifyJob() {
 
 	for _, ingest := range ingests {
 		notification := NOTIFICATION_TEXT + "\n"
-		notification += "\nIngest ID: " + string(rune(ingest.ID))
 		notification += "\nEmail: " + ingest.Email
 		notification += "\nURL: " + ingest.URL
 
 		err := SendNotification(notification)
 
 		if err != nil {
-			continue
+			log.Printf("Failed to send notification for ingest ID %d: %v", ingest.ID, err)
 		}
 	}
 }

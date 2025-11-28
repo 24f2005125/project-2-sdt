@@ -58,21 +58,9 @@ func main() {
 			return
 		}
 
-		// Start the quiz session
-		err = StartQuizSession(req)
-		if err != nil {
-			c.JSON(500, APIResponse[any]{
-				Status:  "error",
-				Message: "quiz_session_failed",
-				Error:   err.Error(),
-				Data:    nil,
-			})
-			return
-		}
-
 		c.JSON(200, APIResponse[any]{
 			Status:  "success",
-			Message: "quiz_session_started",
+			Message: "ingest_created",
 			Error:   "",
 			Data:    nil,
 		})
@@ -125,9 +113,39 @@ func main() {
 			return
 		}
 
+		// Get the accepted ingest to start the quiz session
+		var ingest Ingests
+		if err := DB.First(&ingest, id).Error; err != nil {
+			c.JSON(500, APIResponse[any]{
+				Status:  "error",
+				Message: "ingest_not_found",
+				Error:   err.Error(),
+				Data:    nil,
+			})
+			return
+		}
+
+		// Start the quiz session now that it's accepted
+		req := TaskRequest{
+			Email:  ingest.Email,
+			Secret: ingest.Secret,
+			Url:    ingest.URL,
+		}
+
+		err = StartQuizSession(req)
+		if err != nil {
+			c.JSON(500, APIResponse[any]{
+				Status:  "error",
+				Message: "quiz_session_failed",
+				Error:   err.Error(),
+				Data:    nil,
+			})
+			return
+		}
+
 		c.JSON(200, APIResponse[any]{
 			Status:  "success",
-			Message: "ingest_accepted",
+			Message: "ingest_accepted_and_quiz_started",
 			Error:   "",
 			Data:    nil,
 		})
