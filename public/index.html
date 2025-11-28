@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <title>Ingests & Quiz Sessions</title>
+  <style>
+    /* progress fill transition and colors */
+    .progress-track { background: #f1f5f9; border-radius: 999px; height: 10px; overflow: hidden; }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      transition: width 0.6s ease;
+      border-radius: 999px;
+    }
+    /* color buckets will be applied via inline style/class switching in JS */
+    .progress-green { background: linear-gradient(90deg,#10b981,#34d399); } /* emerald-ish */
+    .progress-yellow { background: linear-gradient(90deg,#f59e0b,#fbbf24); } /* amber */
+    .progress-red { background: linear-gradient(90deg,#ef4444,#f97316); } /* red/orange */
+    
+    /* quiz-specific styles */
+    .quiz-waiting { border-left: 4px solid #f59e0b; }
+    .quiz-completed { border-left: 4px solid #10b981; }
+    .quiz-failed { border-left: 4px solid #ef4444; }
+    .attempt-correct { background-color: #dcfce7; }
+    .attempt-incorrect { background-color: #fef2f2; }
+    .attempt-pending { background-color: #fffbeb; }
+    
+    /* timer styles */
+    .timer-countdown {
+      color: #059669;
+    }
+    .timer-countdown.warning {
+      color: #d97706;
+    }
+    .timer-countdown.critical {
+      color: #dc2626;
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 min-h-screen text-slate-800">
+  <div class="max-w-6xl mx-auto p-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-semibold">Ingests & Quiz Sessions</h1>
+      <p class="text-sm text-slate-500">Showing recent ingest records from <code>/ingest</code> and active quiz sessions</p>
+      
+      <!-- Tab Navigation -->
+      <div class="mt-4 border-b border-slate-200">
+        <nav class="-mb-px flex space-x-8">
+          <button id="ingestsTab" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors tab-active">
+            Ingests
+          </button>
+          <button id="quizTab" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors">
+            Quiz Sessions
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="content">
+      <!-- Ingests Section -->
+      <div id="ingestsSection">
+        <div id="loading" class="py-4">
+          <div class="mb-2 text-sm text-slate-500">Loading ingests...</div>
+          <div class="w-full h-2 rounded-full bg-slate-200 overflow-hidden indeterminate" aria-hidden="true"></div>
+        </div>
+
+        <div id="list" class="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3"></div>
+        <div id="empty" class="hidden py-8 text-center text-slate-500">No ingests found.</div>
+      </div>
+
+      <!-- Quiz Sessions Section -->
+      <div id="quizSection" class="hidden">
+        <div id="quizLoading" class="py-4">
+          <div class="mb-2 text-sm text-slate-500">Loading quiz sessions...</div>
+          <div class="w-full h-2 rounded-full bg-slate-200 overflow-hidden indeterminate" aria-hidden="true"></div>
+        </div>
+
+        <div id="quizList" class="space-y-4"></div>
+        <div id="quizEmpty" class="hidden py-8 text-center text-slate-500">No active quiz sessions found.</div>
+        
+        <!-- Quick Answer Form -->
+        <div id="quickAnswerForm" class="mt-6 bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hidden">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-3 h-3 bg-indigo-500 rounded-full"></div>
+            <h3 class="text-lg font-semibold">Submit Answer</h3>
+          </div>
+          <div class="grid gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Session</label>
+              <select id="sessionSelect" class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all">
+                <option value="">Select a session...</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Submit URL</label>
+              <input id="submitUrlInput" type="url" class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm transition-all" placeholder="https://tds-llm-analysis.s-anand.net/submit" value="https://tds-llm-analysis.s-anand.net/submit">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Password</label>
+              <input id="quizPasswordInput" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" placeholder="Enter quiz password">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Answer</label>
+              <textarea id="answerInput" rows="4" class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm transition-all" placeholder='Enter your answer, e.g., 12345 or "text" or {"key": "value"}'></textarea>
+            </div>
+            <div class="flex justify-end gap-3">
+              <button id="clearAnswer" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors">Clear</button>
+              <button id="submitAnswer" class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors font-medium">Submit Answer</button>
+            </div>
+            <div id="answerResponse" class="hidden mt-3 p-3 rounded-lg text-sm"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal backdrop: centered -->
+  <div id="modalBackdrop" class="fixed inset-0 bg-black/40 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <h2 class="text-lg font-medium mb-2">Confirm acceptance</h2>
+      <p id="modalInfo" class="text-sm text-slate-500 mb-4">Enter password to accept notification for ingest <span id="modalIngestId" class="font-mono"></span>.</p>
+
+      <label class="block text-sm text-slate-700">Password</label>
+      <input id="passwordInput" type="password" class="mt-1 mb-4 block w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300" autocomplete="off" />
+
+      <div class="flex justify-end gap-3">
+        <button id="modalCancel" class="px-4 py-2 rounded-md bg-slate-100 hover:bg-slate-200">Cancel</button>
+        <button id="modalSubmit" class="px-4 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Submit</button>
+      </div>
+
+      <p id="modalMessage" class="mt-3 text-sm text-rose-600 hidden"></p>
+    </div>
+  </div>
+
+  <script type="module">
+    function escapeHTML(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+
+function prettyJSON(raw) {
+  if (!raw) return '';
+
+  try {
+    const obj = JSON.parse(raw);
+    const pretty = JSON.stringify(obj, null, 2);
+    return escapeHTML(pretty);
+  } catch {
+    // Not valid JSON, return as-is (escaped)
+    return escapeHTML(raw);
+  }
+}
+
+    const qs = sel => document.querySelector(sel);
+    const listEl = qs('#list');
+    const loadingEl = qs('#loading');
+    const emptyEl = qs('#empty');
+    
+    // Quiz elements
+    const ingestsTab = qs('#ingestsTab');
+    const quizTab = qs('#quizTab');
+    const ingestsSection = qs('#ingestsSection');
+    const quizSection = qs('#quizSection');
+    const quizListEl = qs('#quizList');
+    const quizLoadingEl = qs('#quizLoading');
+    const quizEmptyEl = qs('#quizEmpty');
+    const quickAnswerForm = qs('#quickAnswerForm');
+    const sessionSelect = qs('#sessionSelect');
+    const submitUrlInput = qs('#submitUrlInput');
+    const answerInput = qs('#answerInput');
+    const quizPasswordInput = qs('#quizPasswordInput');
+    const submitAnswerBtn = qs('#submitAnswer');
+    const clearAnswerBtn = qs('#clearAnswer');
+    const answerResponse = qs('#answerResponse');
+    
+    let activeTab = 'ingests';
+    let quizSessions = [];
+    let quizAttempts = {};
+
+    // Modal elements
+    const modalBackdrop = qs('#modalBackdrop');
+    const modalIngestIdSpan = qs('#modalIngestId');
+    const passwordInput = qs('#passwordInput');
+    const modalSubmit = qs('#modalSubmit');
+    const modalCancel = qs('#modalCancel');
+    const modalMessage = qs('#modalMessage');
+
+    let activeIngestId = null;
+
+    // --- Tab Management ---
+    let switchTabTimeout = null;
+    function switchTab(tab) {
+      if (switchTabTimeout) clearTimeout(switchTabTimeout);
+      
+      activeTab = tab;
+      
+      // Clear timers when switching away from quiz tab
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      
+      // Update tab styles
+      if (tab === 'ingests') {
+        ingestsTab.classList.add('border-indigo-500', 'text-indigo-600');
+        ingestsTab.classList.remove('border-transparent', 'text-slate-500');
+        quizTab.classList.add('border-transparent', 'text-slate-500');
+        quizTab.classList.remove('border-indigo-500', 'text-indigo-600');
+        
+        ingestsSection.classList.remove('hidden');
+        quizSection.classList.add('hidden');
+      } else {
+        quizTab.classList.add('border-indigo-500', 'text-indigo-600');
+        quizTab.classList.remove('border-transparent', 'text-slate-500');
+        ingestsTab.classList.add('border-transparent', 'text-slate-500');
+        ingestsTab.classList.remove('border-indigo-500', 'text-indigo-600');
+        
+        quizSection.classList.remove('hidden');
+        ingestsSection.classList.add('hidden');
+        
+        // Debounced load with delay to prevent excessive calls
+        switchTabTimeout = setTimeout(() => {
+          loadQuizSessions(false); // Don't preserve scroll when switching tabs
+        }, 300);
+      }
+    }
+
+    // --- Quiz Management ---
+    function showQuizLoading() { quizLoadingEl.style.display = 'block'; }
+    function hideQuizLoading() { quizLoadingEl.style.display = 'none'; }
+    function showQuizEmpty() { quizEmptyEl.classList.remove('hidden'); }
+    function hideQuizEmpty() { quizEmptyEl.classList.add('hidden'); }
+
+    let isLoadingQuizSessions = false;
+    async function loadQuizSessions(preserveScroll = true) {
+      if (isLoadingQuizSessions) {
+        console.log('Quiz sessions already loading, skipping...');
+        return;
+      }
+      
+      try {
+        isLoadingQuizSessions = true;
+        // Save current scroll position
+        const scrollY = preserveScroll ? window.scrollY : 0;
+        
+        showQuizLoading();
+        hideQuizEmpty();
+        quizListEl.innerHTML = '';
+        
+        const res = await fetch('/quiz/sessions', { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('Failed to fetch quiz sessions: ' + res.status);
+        
+        const data = await res.json();
+        
+        if (data.status === 'success' && Array.isArray(data.data)) {
+          quizSessions = data.data;
+          
+          if (quizSessions.length === 0) {
+            showQuizEmpty();
+          } else {
+            hideQuizEmpty();
+            
+            // Load attempts for each session
+            for (const session of quizSessions) {
+              await loadQuizAttempts(session.id);
+            }
+            
+            renderQuizSessions();
+            updateSessionSelect();
+          }
+        } else {
+          showQuizEmpty();
+        }
+        
+        // Restore scroll position after DOM updates
+        if (preserveScroll) {
+          setTimeout(() => {
+            window.scrollTo(0, scrollY);
+          }, 50);
+        }
+      } catch (err) {
+        quizListEl.innerHTML = `<div class="p-4 text-sm text-rose-600 bg-white rounded-2xl shadow-sm border">Error loading quiz sessions: ${err.message}</div>`;
+        console.error(err);
+      } finally {
+        hideQuizLoading();
+        isLoadingQuizSessions = false;
+      }
+    }
+
+    async function loadQuizAttempts(sessionId) {
+      try {
+        const res = await fetch(`/quiz/sessions/${sessionId}/attempts`, { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'success') {
+            quizAttempts[sessionId] = data.data || [];
+          }
+        }
+      } catch (err) {
+        console.error('Error loading attempts for session', sessionId, err);
+        quizAttempts[sessionId] = [];
+      }
+    }
+
+    function renderQuizSessions() {
+      quizListEl.innerHTML = '';
+      
+      quizSessions.forEach(session => {
+        const attempts = quizAttempts[session.id] || [];
+        const currentAttempt = attempts.find(a => {
+          const isPending = !a.answer || a.answer === '';
+          const hasDeadline = a.deadline && a.deadline !== '';
+          const notExpired = !hasDeadline || new Date(a.deadline) > new Date();
+          return isPending && notExpired;
+        });
+        const hasActiveAttempts = !!currentAttempt;
+        
+        const sessionEl = document.createElement('div');
+        sessionEl.className = `bg-white rounded-2xl p-6 shadow-sm border border-slate-100 quiz-${session.status.replace('_', '-')}`;
+        
+        sessionEl.innerHTML = `
+          <div class="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 class="text-lg font-semibold">Session ${session.id}</h3>
+              <p class="text-slate-600">${session.email}</p>
+              <p class="text-sm text-slate-500 mt-1">
+                Status: <span class="font-medium">${session.status.replace('_', ' ')}</span>
+              </p>
+            </div>
+            <div class="text-right text-xs text-slate-400">
+              <div>Created</div>
+              <div class="mt-1">${fmtDate(session.createdAt)}</div>
+            </div>
+          </div>
+          
+          ${currentAttempt ? `
+            <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div class="flex justify-between items-start mb-2">
+                <h4 class="font-medium text-amber-800">Current Question</h4>
+                <div class="text-right">
+                  <div class="text-xs text-slate-500 mb-1">Time remaining</div>
+                  <div class="timer-countdown font-mono text-sm font-bold" data-deadline="${currentAttempt.deadline}">
+                    --:--
+                  </div>
+                </div>
+              </div>
+              <p class="text-sm text-amber-700 mb-2">${escapeHTML(currentAttempt.question || 'Visit the URL to see the question')}</p>
+              <a href="${currentAttempt.url}" target="_blank" class="text-sm text-indigo-600 hover:text-indigo-800 underline">
+                → Open Quiz Page
+              </a>
+            </div>
+          ` : ''}
+          
+          <div class="mb-4">
+            <h4 class="font-medium text-slate-700 mb-2">Attempt History</h4>
+            <div class="space-y-2 max-h-60 overflow-y-auto">
+              ${attempts.map(attempt => {
+                const isPending = !attempt.answer || attempt.answer === '';
+                const hasDeadline = attempt.deadline && attempt.deadline !== '';
+                const isExpired = isPending && hasDeadline && new Date(attempt.deadline) <= new Date();
+                return `
+                <div class="p-3 rounded-lg border text-sm ${
+                  isPending ? (isExpired ? 'bg-red-50 border-red-200' : 'attempt-pending') :
+                  attempt.correct ? 'attempt-correct' : 'attempt-incorrect'
+                }">
+                  <div class="flex justify-between items-start mb-1">
+                    <a href="${attempt.url}" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline text-xs font-mono">
+                      ${attempt.url.replace('https://', '').substring(0, 50)}...
+                    </a>
+                    <span class="text-xs text-slate-500">${fmtDate(attempt.createdAt)}</span>
+                  </div>
+                  ${attempt.answer ? `
+                    <div class="mb-1"><span class="text-slate-600">Answer:</span> <code class="text-xs bg-slate-100 px-1 rounded">${escapeHTML(attempt.answer.substring(0, 100))}</code></div>
+                    <div class="mb-1"><span class="text-slate-600">Result:</span> ${attempt.correct ? '✅ Correct' : '❌ Incorrect'}</div>
+                    ${attempt.reason ? `<div class="text-xs text-slate-600 italic">${escapeHTML(attempt.reason)}</div>` : ''}
+                  ` : isPending ? (isExpired ? 
+                    '<div class="text-red-600 font-medium">⏰ Expired</div>' : 
+                    '<div class="text-amber-600 font-medium flex items-center gap-2">⏳ Waiting for answer... <span class="timer-countdown text-xs" data-deadline="' + attempt.deadline + '">--:--</span></div>'
+                  ) : ''}
+                </div>
+              `;
+              }).join('')}
+              ${attempts.length === 0 ? '<div class="text-slate-500 text-center py-2">No attempts yet</div>' : ''}
+            </div>
+          </div>
+          
+          ${hasActiveAttempts ? `
+            <button class="quick-answer-btn w-full py-2 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors" data-session-id="${session.id}">
+              Quick Answer for Session ${session.id}
+            </button>
+          ` : ''}
+        `;
+        
+        quizListEl.appendChild(sessionEl);
+        
+        // Add quick answer button handler
+        const quickBtn = sessionEl.querySelector('.quick-answer-btn');
+        if (quickBtn) {
+          quickBtn.addEventListener('click', () => {
+            sessionSelect.value = session.id;
+            quickAnswerForm.classList.remove('hidden');
+            answerInput.focus();
+          });
+        }
+      });
+      
+      // Show quick answer form if there are active sessions with pending attempts
+      const hasActiveSessions = quizSessions.some(s => {
+        const attempts = quizAttempts[s.id] || [];
+        return attempts.some(a => {
+          const isPending = !a.answer || a.answer === '';
+          const hasDeadline = a.deadline && a.deadline !== '';
+          const notExpired = !hasDeadline || new Date(a.deadline) > new Date();
+          return isPending && notExpired;
+        });
+      });
+      if (hasActiveSessions) {
+        quickAnswerForm.classList.remove('hidden');
+      } else {
+        quickAnswerForm.classList.add('hidden');
+      }
+      
+      // Start timers after rendering
+      startTimers();
+    }
+
+    function updateSessionSelect() {
+      const currentValue = sessionSelect.value;
+      sessionSelect.innerHTML = '<option value="">Select a session...</option>';
+      
+      quizSessions.forEach(session => {
+        const attempts = quizAttempts[session.id] || [];
+        const hasPendingAttempts = attempts.some(a => {
+          const isPending = !a.answer || a.answer === '';
+          const hasDeadline = a.deadline && a.deadline !== '';
+          const notExpired = !hasDeadline || new Date(a.deadline) > new Date();
+          return isPending && notExpired;
+        });
+        
+        if (hasPendingAttempts) {
+          const option = document.createElement('option');
+          option.value = session.id;
+          option.textContent = `Session ${session.id} - ${session.email}`;
+          sessionSelect.appendChild(option);
+        }
+      });
+      
+      if (currentValue) {
+        sessionSelect.value = currentValue;
+      }
+    }
+
+    async function submitQuizAnswer() {
+      const sessionId = sessionSelect.value;
+      const answerText = answerInput.value.trim();
+      const submitUrl = submitUrlInput.value.trim();
+      const password = quizPasswordInput.value.trim();
+      
+      if (!sessionId) {
+        showAnswerResponse('Please select a session', 'error');
+        return;
+      }
+      
+      if (!answerText) {
+        showAnswerResponse('Please provide an answer', 'error');
+        return;
+      }
+      
+      if (!password) {
+        showAnswerResponse('Please provide the quiz attempt password', 'error');
+        return;
+      }
+      
+      try {
+        submitAnswerBtn.disabled = true;
+        submitAnswerBtn.textContent = 'Submitting...';
+        
+        // Try to parse as JSON, fallback to string
+        let answer;
+        try {
+          answer = JSON.parse(answerText);
+        } catch {
+          answer = answerText;
+        }
+        
+        // Prepare request body
+        const requestBody = { 
+          answer,
+          password 
+        };
+        if (submitUrl) {
+          requestBody.submitUrl = submitUrl;
+        }
+        
+        const res = await fetch(`/quiz/sessions/${sessionId}/answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+        
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+          const response = data.data;
+          let message = `Answer submitted! `;
+          
+          if (response.correct) {
+            if (response.url) {
+              message += `Correct! Next URL: ${response.url}`;
+            } else {
+              message += 'Correct! Quiz completed! 🎉';
+            }
+            showAnswerResponse(message, 'success');
+          } else {
+            // Answer is incorrect
+            if (response.url) {
+              message += `Incorrect. ${response.reason || 'Moving to next question anyway.'} Next URL: ${response.url}`;
+              showAnswerResponse(message, 'error');
+            } else {
+              message += `Incorrect. ${response.reason || 'Try again with a different answer.'}`;
+              showAnswerResponse(message + ' You can retry while within the 3-minute window.', 'error');
+              // Don't clear the form to allow retry - no automatic refresh
+              return; // Don't clear form for retry
+            }
+          }
+          
+          // Clear form and refresh after answer submission
+          answerInput.value = '';
+          quizPasswordInput.value = '';
+          setTimeout(() => {
+            loadQuizSessions(true);
+          }, 1500);
+          
+        } else {
+          showAnswerResponse(`Error: ${data.message}`, 'error');
+        }
+      } catch (err) {
+        showAnswerResponse(`Network error: ${err.message}`, 'error');
+      } finally {
+        submitAnswerBtn.disabled = false;
+        submitAnswerBtn.textContent = 'Submit Answer';
+      }
+    }
+
+    function showAnswerResponse(message, type) {
+      answerResponse.textContent = message;
+      answerResponse.className = `mt-3 p-3 rounded-md text-sm ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+      answerResponse.classList.remove('hidden');
+      
+      setTimeout(() => {
+        answerResponse.classList.add('hidden');
+      }, 5000);
+    }
+
+    // --- Timer Management ---
+    let timerInterval = null;
+    
+    function updateTimers() {
+      const timers = document.querySelectorAll('.timer-countdown');
+      let hasActiveTimers = false;
+      
+      timers.forEach(timer => {
+        const deadlineStr = timer.dataset.deadline;
+        if (!deadlineStr || deadlineStr === '') {
+          timer.textContent = 'No limit';
+          timer.className = 'timer-countdown';
+          hasActiveTimers = true;
+          return;
+        }
+        
+        const deadline = new Date(deadlineStr);
+        const now = new Date();
+        const remaining = deadline - now;
+        
+        if (remaining <= 0) {
+          timer.textContent = 'EXPIRED';
+          timer.className = 'timer-countdown critical';
+        } else {
+          hasActiveTimers = true;
+          const minutes = Math.floor(remaining / 60000);
+          const seconds = Math.floor((remaining % 60000) / 1000);
+          timer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+          
+          // Update styling based on time remaining
+          if (remaining <= 30000) { // 30 seconds
+            timer.className = 'timer-countdown critical';
+          } else if (remaining <= 60000) { // 1 minute
+            timer.className = 'timer-countdown warning';
+          } else {
+            timer.className = 'timer-countdown';
+          }
+        }
+      });
+      
+      // If no active timers, clear the interval and refresh data
+      if (!hasActiveTimers && timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        if (activeTab === 'quiz') {
+          loadQuizSessions(true);
+        }
+      }
+    }
+    
+    function startTimers() {
+      if (timerInterval) clearInterval(timerInterval);
+      updateTimers(); // Initial update
+      timerInterval = setInterval(updateTimers, 1000);
+    }
+    
+    // --- Utilities ---
+    function fmtDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (isNaN(d)) return '—';
+      return d.toLocaleString();
+    }
+
+    // compute percent elapsed from created -> deadline relative to now
+    // returns { pct: 0..100, status: 'not-started'|'in-progress'|'done'|'invalid' }
+    function computeProgress(createdAt, deadline) {
+      if (!createdAt || !deadline) return { pct: 0, status: 'invalid' };
+      const start = new Date(createdAt).getTime();
+      const end = new Date(deadline).getTime();
+      if (isNaN(start) || isNaN(end) || end === start) return { pct: 0, status: 'invalid' };
+
+      const now = Date.now();
+      const total = end - start;
+      const elapsed = now - start;
+      const rawPct = Math.round((elapsed / total) * 100);
+      if (now < start) return { pct: 0, status: 'not-started' };
+      if (now >= end) return { pct: 100, status: 'done' };
+      return { pct: Math.max(0, Math.min(100, rawPct)), status: 'in-progress' };
+    }
+
+    // return CSS class for color bucket
+    function progressColorClass(pct, status) {
+      if (status === 'invalid' || status === 'not-started') return 'progress-green';
+      if (status === 'done') return 'progress-red';
+      // pct buckets while in-progress
+      if (pct < 60) return 'progress-green';
+      if (pct < 90) return 'progress-yellow';
+      return 'progress-red';
+    }
+
+    // create card with embedded progress bar and data attributes for updating later
+    function makeCard(ingest) {
+      const id = ingest.id ?? ingest.ID ?? '-';
+      const created = ingest.createdAt ?? ingest.CreatedAt ?? null;
+      const deadline = ingest.deadline ?? ingest.Deadline ?? null;
+
+      const { pct, status } = computeProgress(created, deadline);
+      const colorClass = progressColorClass(pct, status);
+
+      const div = document.createElement('div');
+      div.className = 'bg-white rounded-2xl p-4 shadow-sm border border-slate-100';
+
+      div.innerHTML = `
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-sm text-slate-500">ID <span class="font-mono">${id}</span></div>
+            <h3 class="text-lg font-semibold mt-1">${ingest.email ?? '-'}</h3>
+            <p class="text-sm text-slate-500">${ingest.url ?? '-'}</p>
+          </div>
+          <div class="text-right text-xs text-slate-400">
+            <div>Created</div>
+            <div class="mt-1">${fmtDate(created)}</div>
+          </div>
+        </div>
+
+        <div class="mt-3 text-sm text-slate-600">
+          <p><span class="font-medium text-slate-700">Status:</span> ${ingest.status ?? '-'}</p>
+          <p class="mt-2"><span class="font-medium text-slate-700">Deadline:</span> ${fmtDate(deadline)}</p>
+        </div>
+
+        <!-- progress block -->
+        <div class="mt-3">
+          <div class="flex items-center justify-between mb-2 text-xs text-slate-500">
+            <div>Time to deadline</div>
+            <div class="font-mono" data-pct-label>${pct}%</div>
+          </div>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" title="${pct}%">
+            <div class="progress-fill ${colorClass}" style="width: ${pct}%;"></div>
+          </div>
+        </div>
+
+<div class="mt-3 text-xs text-slate-500 whitespace-pre-wrap bg-slate-50 p-3 rounded-md border border-slate-100">
+  ${prettyJSON(ingest.raw ?? ingest.Raw)}
+</div>
+
+        <div class="mt-4 flex items-center justify-between gap-3">
+          <div class="text-xs text-slate-400">Secret is hidden and not displayed</div>
+          <div class="flex gap-2">
+            <button class="acceptBtn inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700" data-id="${id}">
+              Accept
+            </button>
+          </div>
+        </div>
+      `;
+
+      // attach listener
+      const btn = div.querySelector('.acceptBtn');
+      btn.addEventListener('click', () => openModalForIngest(btn.dataset.id));
+
+      // store timestamps for later updates
+      div.dataset.createdAt = created || '';
+      div.dataset.deadline = deadline || '';
+
+      return div;
+    }
+
+    // updates all progress bars in the DOM using their parent card's data-* timestamps
+    function refreshProgressBars() {
+      const cards = listEl.querySelectorAll('div[data-created-at], div[data-deadline]');
+      // actually we stored data-* on the card root element; select cards that have either dataset
+      const cardEls = Array.from(listEl.children).filter(el => el.dataset !== undefined && ('createdAt' in el.dataset || 'deadline' in el.dataset));
+      cardEls.forEach(card => {
+        const created = card.dataset.createdAt || null;
+        const deadline = card.dataset.deadline || null;
+        const { pct, status } = computeProgress(created, deadline);
+        const colorClass = progressColorClass(pct, status);
+
+        const fill = card.querySelector('.progress-fill');
+        const pctLabel = card.querySelector('[data-pct-label]');
+        const track = card.querySelector('[role="progressbar"]');
+
+        if (fill && pctLabel && track) {
+          // remove previous color classes, add new
+          fill.classList.remove('progress-green', 'progress-yellow', 'progress-red');
+          fill.classList.add(colorClass);
+          // animate width change via CSS transition
+          fill.style.width = pct + '%';
+          // update accessible attributes + label
+          track.setAttribute('aria-valuenow', pct);
+          pctLabel.textContent = pct + '%';
+          track.title = pct + '%';
+        }
+      });
+    }
+
+    // --- Fetch + render ---
+    function showLoading() { loadingEl.style.display = 'block'; }
+    function hideLoading() { loadingEl.style.display = 'none'; }
+    function showEmpty() { emptyEl.classList.remove('hidden'); }
+    function hideEmpty() { emptyEl.classList.add('hidden'); }
+
+    async function loadIngests() {
+      try {
+        showLoading();
+        hideEmpty();
+        listEl.innerHTML = '';
+
+        const res = await fetch('/ingest', { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('Failed to fetch /ingest: ' + res.status);
+
+        const text = await res.text();
+        console.debug('raw /ingest response:', text);
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          throw new Error('Invalid JSON from /ingest');
+        }
+
+        if (!Array.isArray(data)) {
+          if (data && Array.isArray(data.data)) data = data.data;
+          else if (data && Array.isArray(data.ingests)) data = data.ingests;
+          else if (data && Array.isArray(data.results)) data = data.results;
+          else {
+            const vals = Object.values(data).filter(v => Array.isArray(v) && v.length > 0);
+            if (vals.length > 0) data = vals[0];
+          }
+        }
+
+        if (!Array.isArray(data) || data.length === 0) {
+          showEmpty();
+        } else {
+          hideEmpty();
+          data.forEach(i => listEl.appendChild(makeCard(i)));
+          // initial render of progress bars
+          refreshProgressBars();
+        }
+      } catch (err) {
+        listEl.innerHTML = `<div class="col-span-full p-4 text-sm text-rose-600">Error loading ingests: ${err.message}</div>`;
+        console.error(err);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    // --- Modal open/close & submit (same behavior) ---
+    function openModalForIngest(id) {
+      activeIngestId = id;
+      modalIngestIdSpan.textContent = id;
+      passwordInput.value = '';
+      modalMessage.classList.add('hidden');
+      modalBackdrop.classList.remove('hidden');
+      setTimeout(() => passwordInput.focus(), 120);
+    }
+    function closeModal() {
+      activeIngestId = null;
+      modalBackdrop.classList.add('hidden');
+    }
+
+    async function submitPassword() {
+      const password = passwordInput.value ?? '';
+      modalMessage.classList.add('hidden');
+
+      if (!password.trim()) {
+        modalMessage.textContent = 'Please enter a password.';
+        modalMessage.classList.remove('hidden');
+        return;
+      }
+
+      try {
+        modalSubmit.disabled = true;
+        modalSubmit.textContent = 'Submitting...';
+
+        const url = `/ingest/notification-accept?id=${encodeURIComponent(activeIngestId)}&password=${encodeURIComponent(password)}`;
+        const resp = await fetch(url, { method: 'GET', credentials: 'same-origin' });
+
+        if (!resp.ok) {
+          let bodyText = '';
+          try { bodyText = await resp.text(); } catch (e) {}
+          throw new Error(`Server returned ${resp.status} ${resp.statusText}${bodyText ? ' — ' + bodyText : ''}`);
+        }
+
+        modalMessage.classList.remove('hidden');
+        modalMessage.classList.remove('text-rose-600');
+        modalMessage.classList.add('text-emerald-600');
+        modalMessage.textContent = 'Notification accepted successfully.';
+        setTimeout(() => {
+          closeModal();
+          loadIngests();
+        }, 700);
+      } catch (err) {
+        modalMessage.classList.remove('hidden');
+        modalMessage.classList.add('text-rose-600');
+        modalMessage.textContent = 'Failed: ' + err.message;
+      } finally {
+        modalSubmit.disabled = false;
+        modalSubmit.textContent = 'Submit';
+      }
+    }
+
+    // events
+    modalCancel.addEventListener('click', closeModal);
+    modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) closeModal(); });
+    modalSubmit.addEventListener('click', submitPassword);
+    passwordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') submitPassword(); });
+
+    // Tab event listeners
+    ingestsTab.addEventListener('click', () => switchTab('ingests'));
+    quizTab.addEventListener('click', () => switchTab('quiz'));
+    
+    // Quiz answer form listeners
+    submitAnswerBtn.addEventListener('click', submitQuizAnswer);
+    clearAnswerBtn.addEventListener('click', () => {
+      answerInput.value = '';
+      submitUrlInput.value = 'https://tds-llm-analysis.s-anand.net/submit';
+      quizPasswordInput.value = '';
+      answerResponse.classList.add('hidden');
+    });
+    answerInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        submitQuizAnswer();
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Initialize with ingests tab
+      switchTab('ingests');
+      loadIngests();
+      setInterval(refreshProgressBars, 5000); // Reduced frequency
+      
+      // No automatic refresh - only manual or after user actions
+      
+      // Manual refresh button
+      const manualRefreshBtn = document.createElement('button');
+      manualRefreshBtn.textContent = '🔄 Refresh';
+      manualRefreshBtn.className = 'px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition-colors';
+      manualRefreshBtn.onclick = () => {
+        if (activeTab === 'quiz') {
+          loadQuizSessions(true);
+        }
+      };
+      
+      // Add refresh button to quiz tab
+      const quizHeader = document.querySelector('#quiz h2');
+      if (quizHeader) {
+        const headerContainer = document.createElement('div');
+        headerContainer.className = 'flex justify-between items-center mb-4';
+        const h2Element = quizHeader.cloneNode(true);
+        quizHeader.parentNode.replaceChild(headerContainer, quizHeader);
+        headerContainer.appendChild(h2Element);
+        headerContainer.appendChild(manualRefreshBtn);
+      }
+    });
+  </script>
+</body>
+</html>
