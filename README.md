@@ -103,6 +103,8 @@ Expired questions require re-ingestion.
 
 The system deliberately relies on an intelligence source that operates beyond standard automated tools. Initial attempts to use AI repeatedly failed on edge cases, making it impractical for this workflow. The three-minute window allows for consistent higher-order reasoning, while the software itself focuses on formatting questions, managing timing, and maintaining a stable submission process.
 
+This is sort of an experiment, it might fail spectacularly, or it might work surprisingly well. Guess we'll know on 29th November :).
+
 ## LICENSE
 
 MIT License
