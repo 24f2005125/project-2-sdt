@@ -61,6 +61,9 @@
           <button id="quizTab" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors">
             Quiz Sessions
           </button>
+          <button id="initialTab" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors">
+            Initial Submission
+          </button>
         </nav>
       </div>
     </header>
@@ -120,6 +123,46 @@
           </div>
         </div>
       </div>
+
+      <!-- Initial Submission Section -->
+      <div id="initialSection" class="hidden">
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <h3 class="text-lg font-semibold">Initial Submission</h3>
+            <div class="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">Start Here</div>
+          </div>
+          
+          <p class="text-sm text-slate-600 mb-6">
+            Initiate the first request to the TDS LLM Analysis service. This will return the next URL to proceed with the quiz.
+          </p>
+
+          <div class="grid gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Email</label>
+              <input id="initialEmail" type="email" class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="your-email@ds.study.iitm.ac.in">
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Secret</label>
+              <input id="initialSecret" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" placeholder="Enter your secret">
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Answer</label>
+              <textarea id="initialAnswer" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm transition-all" placeholder="Enter your initial answer"></textarea>
+              <p class="text-xs text-slate-500 mt-1">This can be anything - the service will respond with the actual quiz URL</p>
+            </div>
+            
+            <div class="flex justify-end gap-3">
+              <button id="clearInitial" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors">Clear</button>
+              <button id="submitInitial" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium">Submit Initial Request</button>
+            </div>
+            
+            <div id="initialResponse" class="hidden mt-4 p-4 rounded-lg text-sm"></div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -169,11 +212,13 @@ function prettyJSON(raw) {
     const loadingEl = qs('#loading');
     const emptyEl = qs('#empty');
     
-    // Quiz elements
+    // Tab elements
     const ingestsTab = qs('#ingestsTab');
     const quizTab = qs('#quizTab');
+    const initialTab = qs('#initialTab');
     const ingestsSection = qs('#ingestsSection');
     const quizSection = qs('#quizSection');
+    const initialSection = qs('#initialSection');
     const quizListEl = qs('#quizList');
     const quizLoadingEl = qs('#quizLoading');
     const quizEmptyEl = qs('#quizEmpty');
@@ -185,6 +230,14 @@ function prettyJSON(raw) {
     const submitAnswerBtn = qs('#submitAnswer');
     const clearAnswerBtn = qs('#clearAnswer');
     const answerResponse = qs('#answerResponse');
+    
+    // Initial submission elements
+    const initialEmail = qs('#initialEmail');
+    const initialSecret = qs('#initialSecret');
+    const initialAnswer = qs('#initialAnswer');
+    const submitInitialBtn = qs('#submitInitial');
+    const clearInitialBtn = qs('#clearInitial');
+    const initialResponse = qs('#initialResponse');
     
     let activeTab = 'ingests';
     let quizSessions = [];
@@ -214,23 +267,27 @@ function prettyJSON(raw) {
       }
       
       // Update tab styles
-      if (tab === 'ingests') {
-        ingestsTab.classList.add('border-indigo-500', 'text-indigo-600');
-        ingestsTab.classList.remove('border-transparent', 'text-slate-500');
-        quizTab.classList.add('border-transparent', 'text-slate-500');
-        quizTab.classList.remove('border-indigo-500', 'text-indigo-600');
-        
-        ingestsSection.classList.remove('hidden');
-        quizSection.classList.add('hidden');
-      } else {
-        quizTab.classList.add('border-indigo-500', 'text-indigo-600');
-        quizTab.classList.remove('border-transparent', 'text-slate-500');
-        ingestsTab.classList.add('border-transparent', 'text-slate-500');
-        ingestsTab.classList.remove('border-indigo-500', 'text-indigo-600');
-        
-        quizSection.classList.remove('hidden');
-        ingestsSection.classList.add('hidden');
-        
+      const tabs = [
+        { id: 'ingestsTab', element: ingestsTab, section: ingestsSection },
+        { id: 'quizTab', element: quizTab, section: quizSection },
+        { id: 'initialTab', element: initialTab, section: initialSection }
+      ];
+      
+      tabs.forEach(tabObj => {
+        if ((tab === 'ingests' && tabObj.id === 'ingestsTab') ||
+            (tab === 'quiz' && tabObj.id === 'quizTab') ||
+            (tab === 'initial' && tabObj.id === 'initialTab')) {
+          tabObj.element.classList.add('border-indigo-500', 'text-indigo-600');
+          tabObj.element.classList.remove('border-transparent', 'text-slate-500');
+          tabObj.section.classList.remove('hidden');
+        } else {
+          tabObj.element.classList.add('border-transparent', 'text-slate-500');
+          tabObj.element.classList.remove('border-indigo-500', 'text-indigo-600');
+          tabObj.section.classList.add('hidden');
+        }
+      });
+      
+      if (tab === 'quiz') {
         // Debounced load with delay to prevent excessive calls
         switchTabTimeout = setTimeout(() => {
           loadQuizSessions(false); // Don't preserve scroll when switching tabs
@@ -561,6 +618,81 @@ function prettyJSON(raw) {
         submitAnswerBtn.textContent = 'Submit Answer';
       }
     }
+    
+    async function submitInitialRequest() {
+      const email = initialEmail.value.trim();
+      const secret = initialSecret.value.trim();
+      const answer = initialAnswer.value.trim();
+
+      if (!email || !secret || !answer) {
+        showInitialResponse('Please fill in all fields', 'error');
+        return;
+      }
+
+      submitInitialBtn.disabled = true;
+      submitInitialBtn.textContent = 'Submitting...';
+      
+      try {
+        const response = await fetch('/submit-initial', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email,
+            secret: secret,
+            answer: answer
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+          const responseData = data.data;
+          let message = `✅ Initial submission successful!<br>`;
+          message += `<strong>Correct:</strong> ${responseData.correct}<br>`;
+          if (responseData.reason) {
+            message += `<strong>Reason:</strong> ${responseData.reason}<br>`;
+          }
+          if (responseData.url) {
+            message += `<strong>Next URL:</strong> <a href="${responseData.url}" target="_blank" class="text-blue-600 hover:text-blue-800 underline break-all">${responseData.url}</a><br>`;
+          }
+          if (responseData.delay) {
+            message += `<strong>Delay:</strong> ${responseData.delay}ms<br>`;
+          }
+          
+          showInitialResponse(message, 'success');
+          
+          // Clear form after successful submission
+          initialEmail.value = '';
+          initialSecret.value = '';
+          initialAnswer.value = '';
+          
+        } else {
+          showInitialResponse(`Error: ${data.message}`, 'error');
+        }
+      } catch (err) {
+        showInitialResponse(`Network error: ${err.message}`, 'error');
+      } finally {
+        submitInitialBtn.disabled = false;
+        submitInitialBtn.textContent = 'Submit Initial Request';
+      }
+    }
+    
+    function showInitialResponse(message, type) {
+      initialResponse.innerHTML = message;
+      initialResponse.classList.remove('hidden', 'bg-green-50', 'text-green-800', 'bg-red-50', 'text-red-800', 'bg-blue-50', 'text-blue-800');
+      
+      if (type === 'success') {
+        initialResponse.classList.add('bg-green-50', 'text-green-800');
+      } else if (type === 'error') {
+        initialResponse.classList.add('bg-red-50', 'text-red-800');
+      } else {
+        initialResponse.classList.add('bg-blue-50', 'text-blue-800');
+      }
+      
+      initialResponse.classList.remove('hidden');
+    }
 
     function showAnswerResponse(message, type) {
       answerResponse.textContent = message;
@@ -875,6 +1007,7 @@ function prettyJSON(raw) {
     // Tab event listeners
     ingestsTab.addEventListener('click', () => switchTab('ingests'));
     quizTab.addEventListener('click', () => switchTab('quiz'));
+    initialTab.addEventListener('click', () => switchTab('initial'));
     
     // Quiz answer form listeners
     submitAnswerBtn.addEventListener('click', submitQuizAnswer);
@@ -888,6 +1021,15 @@ function prettyJSON(raw) {
       if (e.key === 'Enter' && e.ctrlKey) {
         submitQuizAnswer();
       }
+    });
+    
+    // Initial submission form listeners
+    submitInitialBtn.addEventListener('click', submitInitialRequest);
+    clearInitialBtn.addEventListener('click', () => {
+      initialEmail.value = '';
+      initialSecret.value = '';
+      initialAnswer.value = '';
+      initialResponse.classList.add('hidden');
     });
 
     document.addEventListener('DOMContentLoaded', () => {

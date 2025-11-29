@@ -303,6 +303,49 @@ func main() {
 		})
 	})
 
+	// Initial submission endpoint
+	r.POST("/submit-initial", func(c *gin.Context) {
+		type InitialSubmissionBody struct {
+			Email  string `json:"email" binding:"required"`
+			Secret string `json:"secret" binding:"required"`
+			Answer string `json:"answer" binding:"required"`
+		}
+
+		var body InitialSubmissionBody
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(400, APIResponse[any]{
+				Status:  "error",
+				Message: "invalid_request_body",
+				Error:   err.Error(),
+				Data:    nil,
+			})
+			return
+		}
+
+		response, err := ProcessInitialSubmissionFlow(body.Email, body.Secret, body.Answer)
+		if err != nil {
+			c.JSON(500, APIResponse[any]{
+				Status:  "error",
+				Message: "initial_submission_failed",
+				Error:   err.Error(),
+				Data:    nil,
+			})
+			return
+		}
+
+		message := "initial_submission_completed"
+		if response.Correct && response.URL != "" {
+			message = "initial_submission_completed_with_ingest_and_quiz_session"
+		}
+
+		c.JSON(200, APIResponse[*InitialSubmissionResponse]{
+			Status:  "success",
+			Message: message,
+			Error:   "",
+			Data:    response,
+		})
+	})
+
 	go func() {
 		for {
 			NotifyJob()

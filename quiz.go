@@ -58,6 +58,43 @@ func StartQuizSession(req TaskRequest) error {
 	return nil
 }
 
+// StartQuizSessionWithIngest starts a new quiz session for manual solving with ingest link
+func StartQuizSessionWithIngest(req TaskRequest, ingestID uint) error {
+	// Create a new quiz session
+	session := QuizSession{
+		IngestID:   ingestID,
+		Email:      req.Email,
+		Secret:     req.Secret,
+		CurrentURL: req.Url,
+		Status:     "waiting_for_answer",
+	}
+
+	if err := DB.Create(&session).Error; err != nil {
+		return fmt.Errorf("failed to create quiz session: %v", err)
+	}
+
+	// Update the corresponding ingest status
+	if err := DB.Model(&Ingests{}).Where("id = ?", ingestID).
+		Update("status", IngestStatusRunning).Error; err != nil {
+		return fmt.Errorf("failed to update ingest status: %v", err)
+	}
+
+	// Create initial attempt record
+	attempt := QuizAttempt{
+		SessionID: session.ID,
+		URL:       req.Url,
+		Question:  "Visit the URL to see the question",
+		Answer:    "", // Explicitly set empty string
+		Deadline:  time.Now().Add(3 * time.Minute),
+	}
+
+	if err := DB.Create(&attempt).Error; err != nil {
+		return fmt.Errorf("failed to create quiz attempt: %v", err)
+	}
+
+	return nil
+}
+
 // SubmitManualAnswer submits a manually provided answer to a custom submit URL
 func SubmitManualAnswer(sessionID uint, answerData interface{}, submitURL string) (*QuizResponse, error) {
 	var session QuizSession
